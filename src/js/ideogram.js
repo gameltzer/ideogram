@@ -27,7 +27,7 @@ import {
   eutils, esearch, esummary, elink,
   getTaxidFromEutils, getOrganismFromEutils, getTaxids,
   getAssemblyAndChromosomesFromEutils
-} from './services';
+} from './services/services';
 
 import {
   getBands, drawBandLabels, getBandColorGradients, processBandData
