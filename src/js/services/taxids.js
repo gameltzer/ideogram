@@ -1,3 +1,7 @@
+import * as d3fetch from 'd3-fetch';
+
+var d3 = Object.assign({}, d3fetch);
+
 /**
  *  Returns an NCBI taxonomy identifier (taxid) for the configured organism
  */
@@ -15,21 +19,109 @@ function getTaxidFromEutils(callback) {
   });
 }
 
-/**
- *  Returns an NCBI taxonomy identifier (taxid) for the configured organism
- */
-function getTaxidFromEutils(callback) {
-  var organism, taxonomySearch, taxid,
-    ideo = this;
+function setTaxidData(taxid) {
+  var organism, dataDir, urlOrg;
 
   organism = ideo.config.organism;
+  dataDir = ideo.config.dataDir;
+  if (multiorganism && taxids.length === 1) {
+    urlOrg = organism.replace(' ', '-');
+  }
 
-  taxonomySearch = ideo.esearch + '&db=taxonomy&term=' + organism;
+  taxid = data;
 
-  d3.json(taxonomySearch).then(function(data) {
-    taxid = data.esearchresult.idlist[0];
-    return callback(taxid);
+  if (taxids.indexOf(taxid) === -1) {
+    taxids.push(taxid);
+  }
+
+  ideo.config.taxids = taxids;
+  ideo.organisms[taxid] = {
+    commonName: '',
+    scientificName: ideo.config.organism,
+    scientificNameAbbr: ''
+  };
+
+  var fullyBandedTaxids = ['9606', '10090', '10116'];
+  if (
+    fullyBandedTaxids.indexOf(taxid) !== -1 &&
+    ideo.config.showFullyBanded === false
+  ) {
+    urlOrg += '-no-bands';
+  }
+  var chromosomesUrl = dataDir + urlOrg + '.js';
+
+  var promise2 = new Promise(function(resolve, reject) {
+    fetch(chromosomesUrl).then(function(response) {
+      if (response.ok === false) {
+        reject(Error('Fetch failed for ' + chromosomesUrl));
+      } else {
+        return response.text().then(function(text) {
+          resolve(text);
+        });
+      }
+    });
   });
+
+  return promise2
+    .then(
+      function(data) {
+        // Check if chromosome data exists locally.
+        // This is used for pre-processed centromere data,
+        // which is not accessible via EUtils.  See get_chromosomes.py.
+
+        var asmAndChrArray = [],
+          chromosomes = [],
+          seenChrs = {},
+          chr;
+
+        eval(data);
+
+        asmAndChrArray.push('');
+
+        for (var i = 0; i < chrBands.length; i++) {
+          chr = chrBands[i].split(' ')[0];
+          if (chr in seenChrs) {
+            continue;
+          } else {
+            chromosomes.push({name: chr, type: 'nuclear'});
+            seenChrs[chr] = 1;
+          }
+        }
+        chromosomes = chromosomes.sort(Ideogram.sortChromosomes);
+        asmAndChrArray.push(chromosomes);
+        ideo.coordinateSystem = 'iscn';
+        return asmAndChrArray;
+      },
+      function() {
+        return new Promise(function(resolve) {
+          ideo.coordinateSystem = 'bp';
+          ideo.getAssemblyAndChromosomesFromEutils(resolve);
+        });
+      }
+    );
+}
+
+function setTaxidAndAssemblyAndChromosomes(callback) {
+  var assembly, chromosomes, getTaxidsFromEutils;
+
+  getTaxidsFromEutils = new Promise(function(resolve) {
+    ideo.getTaxidFromEutils(resolve);
+  });
+
+  getTaxidsFromEutils
+    .then(function(data) {
+      return setTaxidData(data);
+    })
+    .then(function(asmChrArray) {
+      assembly = asmChrArray[0];
+      chromosomes = asmChrArray[1];
+      ideo.config.chromosomes = chromosomes;
+      ideo.organisms[taxid].assemblies = {
+        default: assembly
+      };
+
+      callback(taxids);
+    });
 }
 
 /**
@@ -42,8 +134,7 @@ function getTaxids(callback) {
     taxid, taxids,
     org, orgs, i,
     taxidInit, tmpChrs,
-    assembly, chromosomes,
-    multiorganism, promise;
+    multiorganism;
 
   taxidInit = 'taxid' in ideo.config;
 
@@ -81,111 +172,14 @@ function getTaxids(callback) {
 
     if (
       taxids.length === 0 ||
-      ideo.assemblyIsAccession() && /GCA_/.test(ideo.config.assembly)// ||
-      // multiorganism && taxids.length === 1
+      ideo.assemblyIsAccession() && /GCA_/.test(ideo.config.assembly)
     ) {
-      // if (taxids.length === 0) {
-      promise = new Promise(function(resolve) {
-        ideo.getTaxidFromEutils(resolve);
-      });
-
-      promise.then(function(data) {
-        var organism, dataDir, urlOrg;
-
-        organism = ideo.config.organism;
-        dataDir = ideo.config.dataDir;
-        // if (multiorganism && taxids.length === 1) {
-          urlOrg = organism.replace(' ', '-');
-        // }
-
-        taxid = data;
-
-        if (taxids.indexOf(taxid) === -1) {
-          taxids.push(taxid);
-        }
-
-        ideo.config.taxids = taxids;
-        ideo.organisms[taxid] = {
-          commonName: '',
-          scientificName: ideo.config.organism,
-          scientificNameAbbr: ''
-        };
-
-        var fullyBandedTaxids = ['9606', '10090', '10116'];
-        if (
-          fullyBandedTaxids.indexOf(taxid) !== -1 &&
-          ideo.config.showFullyBanded === false
-        ) {
-          urlOrg += '-no-bands';
-        }
-        var chromosomesUrl = dataDir + urlOrg + '.js';
-
-        var promise2 = new Promise(function(resolve, reject) {
-          fetch(chromosomesUrl).then(function(response) {
-            if (response.ok === false) {
-              reject(Error('Fetch failed for ' + chromosomesUrl));
-            } else {
-              return response.text().then(function(text) {
-                resolve(text);
-              });
-            }
-          });
-        });
-
-        return promise2
-          .then(
-            function(data) {
-              // Check if chromosome data exists locally.
-              // This is used for pre-processed centromere data,
-              // which is not accessible via EUtils.  See get_chromosomes.py.
-
-              var asmAndChrArray = [],
-                chromosomes = [],
-                seenChrs = {},
-                chr;
-
-              eval(data);
-
-              asmAndChrArray.push('');
-
-              for (var i = 0; i < chrBands.length; i++) {
-                chr = chrBands[i].split(' ')[0];
-                if (chr in seenChrs) {
-                  continue;
-                } else {
-                  chromosomes.push({name: chr, type: 'nuclear'});
-                  seenChrs[chr] = 1;
-                }
-              }
-              chromosomes = chromosomes.sort(Ideogram.sortChromosomes);
-              asmAndChrArray.push(chromosomes);
-              ideo.coordinateSystem = 'iscn';
-              return asmAndChrArray;
-            },
-            function() {
-              return new Promise(function(resolve) {
-                ideo.coordinateSystem = 'bp';
-                ideo.getAssemblyAndChromosomesFromEutils(resolve);
-              });
-            }
-          );
-      })
-        .then(function(asmChrArray) {
-          assembly = asmChrArray[0];
-          chromosomes = asmChrArray[1];
-          ideo.config.chromosomes = chromosomes;
-          ideo.organisms[taxid].assemblies = {
-            default: assembly
-          };
-
-          callback(taxids);
-        });
+      setTaxidAndAssemblyAndChromosomes(callback);
     } else {
       ideo.config.taxids = taxids;
       if (multiorganism) {
         ideo.config.chromosomes = tmpChrs;
       }
-
       callback(taxids);
     }
   } else {
