@@ -101,6 +101,11 @@ function setTaxidData(taxid) {
     );
 }
 
+/**
+ * Set ideogram instance data for taxid(s), assembly(ies), and chromosomes
+ *
+ * @param callback
+ */
 function setTaxidAndAssemblyAndChromosomes(callback) {
   var assembly, chromosomes, getTaxidsFromEutils;
 
