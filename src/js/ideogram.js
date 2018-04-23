@@ -24,9 +24,8 @@ import {
 } from './annotations/annotations'
 
 import {
-  eutils, esearch, esummary, elink,
-  getTaxidFromEutils, getOrganismFromEutils, getTaxids,
-  getAssemblyAndChromosomesFromEutils
+  esearch, esummary, elink, getTaxidFromEutils, getOrganismFromEutils,
+  getTaxids, getAssemblyAndChromosomesFromEutils
 } from './services/services';
 
 import {
@@ -74,7 +73,6 @@ export default class Ideogram {
     this.onWillShowAnnotTooltip = onWillShowAnnotTooltip;
 
     // Variables and functions from services.js
-    this.eutils = eutils;
     this.esearch = esearch;
     this.esummary = esummary;
     this.elink = elink;
